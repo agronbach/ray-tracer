@@ -3,7 +3,7 @@
 #include "image.h"
 
 #define MAX_SPHERES 10
-#define T_MAX 10000
+#define T_MAX 1e7
 
 using namespace glm;
 
@@ -26,6 +26,8 @@ typedef struct {
 typedef struct {
    ViewPlane view_plane;
    vec3 position;
+   vec3 look_at;
+   vec3 up;
 } Camera;
 
 typedef struct {
@@ -137,19 +139,34 @@ vec3 pixel_color(Sphere* sphere, Light* light, vec3* light_direction, vec3* norm
 Light makeWhiteLight() {
    Light light;
    light.material.diffuse = vec3(1);
-   light.material.specular = vec3(1);
-   light.material.ambient = vec3(1);
-   light.position = vec3(-10, 15, 0);
+   light.material.specular = vec3(.8);
+   light.material.ambient = vec3(.8);
+   light.position = vec3(10, 15, 0);
    return light;
 }
 
 void makeCameraViewPlane(Camera* camera) {
-   camera->view_plane.bottom_left = vec3(-.5, -.5, 1.0);
-   camera->view_plane.top_right = vec3(.5, .5, 1.0);
+   vec3 w = normalize(camera->position - camera->look_at);
+   vec3 u = normalize(cross(camera->up, w));
+   vec3 v = normalize(cross(w, u));
+   print(u);
+   print(v);
+   print(w);
+
+   float l = 0.5f;
+   float r = -0.5f;
+   float t = 0.5f;
+   float b = -0.5f;
+
+   camera->view_plane.bottom_left = u*l + v*b - w + camera->position;
+   camera->view_plane.top_right = u*r + v*t - w + camera->position;
 }
 
 int main(int argc, char** argv) {
    Camera camera;
+   camera.position = vec3(0, 0, 0);
+   camera.look_at = vec3(0, 5, 25);
+   camera.up = vec3(0, 1, 0);
    makeCameraViewPlane(&camera);
 
    Material diffuse;
@@ -199,10 +216,8 @@ int main(int argc, char** argv) {
    }
 
    Image image(kResolutionX, kResolutionY);
-   for (int row = 0; row < kResolutionY; ++row) {
-      for (int col = 0; col < kResolutionX; ++col) {
+   for (int row = 0; row < kResolutionY; ++row)
+      for (int col = 0; col < kResolutionX; ++col)
          image.pixel(row, col, g_pixel_buffer[row][col]);
-      }
-   }
    image.WriteTga("sphere.tga");
 }

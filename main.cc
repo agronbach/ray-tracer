@@ -135,22 +135,23 @@ Ray make_shadow_feeler_ray(const vec3& position, const vec3& light_position) {
    return ray;
 }
 
-vec3 pixel_color(int sphere_index, const Light& light, const vec3& light_direction, const vec3& position, const vec3& view_direction) {
-   vec3 color;
-   vec3 normal = normalize(position - g_spheres[sphere_index].center);
-
-   bool is_shadow = false;
+bool test_for_shadow(const vec3& position, const Light& light, int sphere_index) {
    Ray shadow_feeler_ray(make_shadow_feeler_ray(position, light.position));
    int hit_sphere_index;
    float collision_t;
-   if (test_for_hit(shadow_feeler_ray, &hit_sphere_index, &collision_t, sphere_index)) {
-      is_shadow = true;
-   }
+   return test_for_hit(shadow_feeler_ray, &hit_sphere_index, &collision_t, sphere_index);
+}
+
+vec3 pixel_color(int sphere_index, const Light& light, const vec3& light_direction, const vec3& position, const vec3& view_direction) {
+   vec3 color;
+   vec3 normal = normalize(position - g_spheres[sphere_index].center);
+   bool is_shadowed = test_for_shadow(position, light, sphere_index);
 
    float reflection_component;
-   float diffuse_component = dot(light_direction, normal);
-   if (!is_shadow) {
-      reflection_component = dot(reflection(light_direction, normal), view_direction);
+   float diffuse_component;
+   // No need to calculate if it is a shadow
+   if (!is_shadowed) {
+      reflection_component = pow(dot(reflection(light_direction, normal), view_direction), g_spheres[sphere_index].material.alpha);
       diffuse_component = dot(light_direction, normal);
    }
 
@@ -158,10 +159,12 @@ vec3 pixel_color(int sphere_index, const Light& light, const vec3& light_directi
    for (int i = 0; i < 3; ++i) {
       float diffuse = 0.0f;
       float specular = 0.0f;
-      if (!is_shadow && reflection_component > 0.0f)
-         specular = light.material.specular[i]*g_spheres[sphere_index].material.specular[i] * pow(reflection_component, g_spheres[sphere_index].material.alpha);
-      if (!is_shadow && diffuse_component > 0.0f)
-         diffuse = light.material.diffuse[i]*g_spheres[sphere_index].material.diffuse[i] * diffuse_component;
+      if (!is_shadowed) {
+         if (reflection_component > 0.0f)
+            specular = light.material.specular[i]*g_spheres[sphere_index].material.specular[i] * reflection_component;
+         if (diffuse_component > 0.0f)
+            diffuse = light.material.diffuse[i]*g_spheres[sphere_index].material.diffuse[i] * diffuse_component;
+      }
       float ambient = light.material.ambient[i]*g_spheres[sphere_index].material.ambient[i];
 
       color[i] = ambient + diffuse + specular;
@@ -263,8 +266,8 @@ void calculate_pixel_buffer_from_ray_trace(Camera& camera, Light& light) {
 int main(int argc, char** argv) {
    Camera camera = makeDefaultCamera();
 
-   add_sphere_to_scene(vec3(.5, 0, 25), 0.6f, makeDiffuseMaterial());
-   add_sphere_to_scene(vec3(0, .5, 23), 0.1f, makeSpecularMaterial());
+   add_sphere_to_scene(vec3(0.5f, 0, 25), 0.6f, makeDiffuseMaterial());
+   add_sphere_to_scene(vec3(0.5f, .5, 23), 0.1f, makeSpecularMaterial());
    add_sphere_to_scene(vec3(-.5, -.5, 25), 0.4f, makeAmbientMaterial());
 
    Light light = makeReddishLight();

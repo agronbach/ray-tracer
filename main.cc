@@ -2,7 +2,7 @@
 #include <glm/glm.hpp>
 #include "image.h"
 
-#define MAX_SPHERES 10
+#define MAX_SPHERES 100
 #define T_MAX 1e7
 
 using namespace glm;
@@ -10,13 +10,11 @@ using namespace glm;
 const int kResolutionX = 600;
 const int kResolutionY = 600;
 const int kDepth = 16;
-const vec3 backgroundColor = vec3(0.0f, 0.0f, 0.0f);
+const vec3 kBackgroundColor = vec3(0.0f, 0.0f, 0.0f);
 
 void print(const vec3& v) {
    printf("(%f, %f, %f)\n", v.x, v.y, v.z);
 }
-
-vec3 g_pixel_buffer[kResolutionX][kResolutionY];
 
 typedef struct {
    vec3 bottom_left;
@@ -54,18 +52,22 @@ typedef struct {
    Material material;
 } Light;
 
+// GLOBAL DATA /////////////////////////////////////////////////////////////////
+vec3 g_pixel_buffer[kResolutionX][kResolutionY];
 Sphere g_spheres[MAX_SPHERES];
 int g_num_spheres = 0;
+// GLOBAL DATA /////////////////////////////////////////////////////////////////
 
 Ray ray_from_pixel_coordinates(int row, int col, Camera& camera) {
    Ray ray;
    ray.origin = camera.position;
-   const float l = camera.view_plane.bottom_left.x;
-   const float r = camera.view_plane.top_right.x;
-   const float b = camera.view_plane.bottom_left.y;
-   const float t = camera.view_plane.top_right.y;
-   ray.direction.x = l + (r - l) * (row + 0.5f) / kResolutionX;
-   ray.direction.y = b + (t - b) * (col + 0.5f) / kResolutionY;
+   const float left = camera.view_plane.bottom_left.x;
+   const float right = camera.view_plane.top_right.x;
+   const float bottom = camera.view_plane.bottom_left.y;
+   const float top = camera.view_plane.top_right.y;
+
+   ray.direction.x = left + (right - left) * (row + 0.5f) / kResolutionX;
+   ray.direction.y = bottom + (top - bottom) * (col + 0.5f) / kResolutionY;
    ray.direction.z = kDepth;
    return ray;
 }
@@ -108,7 +110,7 @@ bool test_for_hit(Ray* ray, int *hit_sphere_index, float *collision_t) {
    return hit;
 }
 
-void add_sphere(const vec3& center, float radius, Material material) {
+void add_sphere_to_scene(const vec3& center, float radius, Material material) {
    g_spheres[g_num_spheres].center = center;
    g_spheres[g_num_spheres].material = material;
    g_spheres[g_num_spheres++].radius = radius;
@@ -136,7 +138,7 @@ vec3 pixel_color(Sphere* sphere, Light* light, vec3* light_direction, vec3* norm
    return color;
 }
 
-Light makeWhiteLight() {
+Light makeReddishLight() {
    Light light;
    light.material.diffuse = vec3(1);
    light.material.specular = vec3(.8);
@@ -146,55 +148,74 @@ Light makeWhiteLight() {
 }
 
 void makeCameraViewPlane(Camera* camera) {
+   // Compute u, v, w basis vectors
    vec3 w = normalize(camera->position - camera->look_at);
    vec3 u = normalize(cross(camera->up, w));
    vec3 v = normalize(cross(w, u));
-   print(u);
-   print(v);
-   print(w);
 
-   float l = 0.5f;
-   float r = -0.5f;
-   float t = 0.5f;
-   float b = -0.5f;
+   float left = 0.5f;
+   float right = -0.5f;
+   float top = 0.5f;
+   float bottom = -0.5f;
 
-   camera->view_plane.bottom_left = u*l + v*b - w + camera->position;
-   camera->view_plane.top_right = u*r + v*t - w + camera->position;
+   camera->view_plane.bottom_left = u*left + v*bottom - w + camera->position;
+   camera->view_plane.top_right = u*right + v*top - w + camera->position;
 }
 
-int main(int argc, char** argv) {
+Material makeDiffuseMaterial() {
+   Material mat;
+   mat.diffuse = vec3(.7, 0, 0);
+   mat.specular = vec3(0, 0, 0.8);
+   mat.ambient = vec3(0, .1, 0);
+   mat.alpha = 20.0f;
+   return mat;
+}
+
+Material makeSpecularMaterial() {
+   Material mat;
+   mat.diffuse = vec3(.8, 0, 0);
+   mat.specular = vec3(0, .2, 0);
+   mat.ambient = vec3(0, 0, .1);
+   mat.alpha = 10.0f;
+   return mat;
+}
+
+Material makeAmbientMaterial() {
+   Material mat;
+   mat.diffuse = vec3(.8, 0, 0);
+   mat.specular = vec3(0, 0, 0.2);
+   mat.ambient = vec3(.4, 0, .4);
+   mat.alpha = 1.0f;
+   return mat;
+}
+
+Camera makeDefaultCamera() {
    Camera camera;
    camera.position = vec3(0, 0, 0);
    camera.look_at = vec3(0, 5, 25);
    camera.up = vec3(0, 1, 0);
    makeCameraViewPlane(&camera);
+   return camera;
+}
 
-   Material diffuse;
-   diffuse.diffuse = vec3(.8, 0, 0);
-   diffuse.specular = vec3(0, .2, 0);
-   diffuse.ambient = vec3(0, 0, .1);
-   diffuse.alpha = 10.0f;
+void write_image_to_file() {
+   Image image(kResolutionX, kResolutionY);
+   for (int row = 0; row < kResolutionY; ++row)
+      for (int col = 0; col < kResolutionX; ++col)
+         image.pixel(row, col, g_pixel_buffer[row][col]);
+   image.WriteTga("sphere.tga");
+}
 
-   Material specular;
-   specular.diffuse = vec3(.7, 0, 0);
-   specular.specular = vec3(0, 0, 0.8);
-   specular.ambient = vec3(0, .1, 0);
-   specular.alpha = 20.0f;
+int main(int argc, char** argv) {
+   Camera camera = makeDefaultCamera();
 
-   Material ambient;
-   ambient.diffuse = vec3(.8, 0, 0);
-   ambient.specular = vec3(0, 0, 0.2);
-   ambient.ambient = vec3(.4, 0, .4);
-   ambient.alpha = 1.0f;
+   add_sphere_to_scene(vec3(.5, 0, 25), 0.6f, makeDiffuseMaterial());
+   add_sphere_to_scene(vec3(0, .5, 25), 0.3f, makeSpecularMaterial());
+   add_sphere_to_scene(vec3(-.5, -.5, 25), 0.4f, makeAmbientMaterial());
 
-   add_sphere(vec3(.5, 0, 25), 0.6f, diffuse);
-   add_sphere(vec3(0, .5, 25), 0.3f, specular);
-   add_sphere(vec3(-.5, -.5, 25), 0.4f, ambient);
+   Light light = makeReddishLight();
 
-   Light light = makeWhiteLight();
-
-   // Compute u, v, w basis vectors
-   // for each pixel do
+   // for each pixel
    for (int row = 0; row < kResolutionY; ++row) {
       for (int col = 0; col < kResolutionX; ++col) {
          // compute viewing ray
@@ -205,19 +226,16 @@ int main(int argc, char** argv) {
             // find first object hit by ray and its surface normal n
             vec3 position = ray.origin + collision_t*normalize(ray.direction);
             vec3 normal = normalize(position - g_spheres[hit_sphere_index].center);
-            // set pixel color to value based on material, light, and n
             vec3 light_direction = normalize(light.position - position);
             vec3 view_direction = normalize(camera.position - position);
-            g_pixel_buffer[row][col] = pixel_color(g_spheres + hit_sphere_index, &light, &light_direction, &normal, &view_direction);
+            // set pixel color to value based on material, light, and n
+            g_pixel_buffer[row][col] = pixel_color(&g_spheres[hit_sphere_index], &light, &light_direction, &normal, &view_direction);
          } else {
-            g_pixel_buffer[row][col] = backgroundColor;
+            // If no hit occurs, set to the background color
+            g_pixel_buffer[row][col] = kBackgroundColor;
          }
       }
    }
 
-   Image image(kResolutionX, kResolutionY);
-   for (int row = 0; row < kResolutionY; ++row)
-      for (int col = 0; col < kResolutionX; ++col)
-         image.pixel(row, col, g_pixel_buffer[row][col]);
-   image.WriteTga("sphere.tga");
+   write_image_to_file();
 }

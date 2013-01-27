@@ -72,9 +72,12 @@ Ray ray_from_pixel_coordinates(int row, int col, Camera& camera) {
    return ray;
 }
 
-bool does_ray_collides_with_sphere(Ray* ray, Sphere* sphere, float t0, float t1, float *collision_t) {
-   vec3 d = normalize(ray->direction);
-   vec3 e = ray->origin;
+
+// Returns true if the ray hits |sphere| within [t0, t1].
+// If true, populates |collision_t| with the smaller, positive 't' value of the collision.
+bool does_ray_collide_with_sphere(const Ray& ray, Sphere* sphere, float t0, float t1, float *collision_t) {
+   vec3 d = normalize(ray.direction);
+   vec3 e = ray.origin;
    vec3 c = sphere->center;
 
    float discriminant = pow(dot(d, e-c), 2) - dot(d, d) * (dot(e-c, e-c) - pow(sphere->radius, 2));
@@ -92,14 +95,17 @@ bool does_ray_collides_with_sphere(Ray* ray, Sphere* sphere, float t0, float t1,
    return *collision_t > t0 && *collision_t < t1;
 }
 
-bool test_for_hit(Ray* ray, int *hit_sphere_index, float *collision_t) {
+// Returns true if the ray hits any of |g_spheres| in the range t [0.0f, T_MAX]
+// If true, populates |hit_sphere_index| with the index into |g_spheres| of the
+// colliding sphere and |collision_t| with the 't' value of the collision.
+bool test_for_hit(const Ray& ray, int *hit_sphere_index, float *collision_t) {
    float t0 = 0.0f;
    float t1 = T_MAX;
    bool hit = false;
 
    int i;
    for (i = 0; i < g_num_spheres; ++i) {
-      if (does_ray_collides_with_sphere(ray, g_spheres + i, t0, t1, collision_t)) {
+      if (does_ray_collide_with_sphere(ray, &g_spheres[i], t0, t1, collision_t)) {
          hit = true;
          *hit_sphere_index = i;
          t1 = *collision_t;
@@ -206,23 +212,15 @@ void write_image_to_file() {
    image.WriteTga("sphere.tga");
 }
 
-int main(int argc, char** argv) {
-   Camera camera = makeDefaultCamera();
-
-   add_sphere_to_scene(vec3(.5, 0, 25), 0.6f, makeDiffuseMaterial());
-   add_sphere_to_scene(vec3(0, .5, 25), 0.3f, makeSpecularMaterial());
-   add_sphere_to_scene(vec3(-.5, -.5, 25), 0.4f, makeAmbientMaterial());
-
-   Light light = makeReddishLight();
-
+void calculate_pixel_buffer_from_ray_trace(Camera& camera, Light& light) {
    // for each pixel
    for (int row = 0; row < kResolutionY; ++row) {
       for (int col = 0; col < kResolutionX; ++col) {
          // compute viewing ray
-         Ray ray = ray_from_pixel_coordinates(row, col, camera);
+         Ray ray(ray_from_pixel_coordinates(row, col, camera));
          int hit_sphere_index;
          float collision_t;
-         if (test_for_hit(&ray, &hit_sphere_index, &collision_t)) {
+         if (test_for_hit(ray, &hit_sphere_index, &collision_t)) {
             // find first object hit by ray and its surface normal n
             vec3 position = ray.origin + collision_t*normalize(ray.direction);
             vec3 normal = normalize(position - g_spheres[hit_sphere_index].center);
@@ -236,6 +234,18 @@ int main(int argc, char** argv) {
          }
       }
    }
+}
+
+int main(int argc, char** argv) {
+   Camera camera = makeDefaultCamera();
+
+   add_sphere_to_scene(vec3(.5, 0, 25), 0.6f, makeDiffuseMaterial());
+   add_sphere_to_scene(vec3(0, .5, 25), 0.3f, makeSpecularMaterial());
+   add_sphere_to_scene(vec3(-.5, -.5, 25), 0.4f, makeAmbientMaterial());
+
+   Light light = makeReddishLight();
+
+   calculate_pixel_buffer_from_ray_trace(camera, light);
 
    write_image_to_file();
 }

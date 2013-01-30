@@ -1,2 +1,2 @@
 all:
-	g++ *.cc -lm -o ray_tracer
+	g++ *.cc -Wall -Wextra -lm -o ray_tracer

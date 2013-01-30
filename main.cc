@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include <glm/glm.hpp>
+#include "glm/glm.hpp"
 #include "image.h"
 
 #define MAX_SPHERES 100
